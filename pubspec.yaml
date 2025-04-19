@@ -1,0 +1,31 @@
+name: novaipv6
+description: "A new Flutter project."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.3.0
+  wakelock_plus: ^1.1.1
+  dart_ping: ^8.0.0
+  dnsolve: ^1.0.2
+  network_info_plus: ^6.1.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/http_list.txt
+    - assets/dns_list.txt
+    - assets/domains.csv
+
+dependency_overrides:
+  win32: ^5.0.0
