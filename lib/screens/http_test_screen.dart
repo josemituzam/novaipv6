@@ -18,20 +18,21 @@ class _TestScreenState extends State<TestScreen> {
   String ipInfo = 'Buscando IP pública...';
 
   @override
-  void initState() {
-    super.initState();
-    WakelockPlus.enable();
-    _initFlow();
-  }
+void initState() {
+  super.initState();
+  WakelockPlus.enable();
+  _initFlow();
+}
 
-  Future<void> _initFlow() async {
-    await getIpPublic();
-    await _loadUrls();
-    await runTests();
-  }
+Future<void> _initFlow() async {
+  await getIpPublic();   // 1. Primero obtiene IPs públicas
+  await _loadUrls();     // 2. Luego carga los dominios desde el txt
+  await runTests();      // 3. Finalmente corre las pruebas HTTP
+}
+
 
   Future<void> _loadUrls() async {
-    final content = await rootBundle.loadString('assets/http_list.txt');
+    final content = await rootBundle.loadString('assets/http_list.csv');
     final lines = content.split('\n');
 
     setState(() {
@@ -49,12 +50,6 @@ class _TestScreenState extends State<TestScreen> {
   }
 
   Future<void> runTests() async {
-    setState(() {
-      results.clear();
-    });
-
-    await getIpPublic();
-
     for (var test in testUrls) {
       final name = test['name']!;
       setState(() {
@@ -65,10 +60,7 @@ class _TestScreenState extends State<TestScreen> {
       final ipv6 = await checkHttpIPv6Forced(test['ipv6']!);
 
       setState(() {
-        results[name] = TestResult(
-          ipv4.result == 'OK' ? 'OK (${ipv4.ms} ms)' : ipv4.result,
-          ipv6.result == 'OK' ? 'OK (${ipv6.ms} ms)' : ipv6.result,
-        );
+        results[name] = TestResult('${ipv4.result} (${ipv4.ms} ms)', '${ipv6.result} (${ipv6.ms} ms)');
       });
 
       await Future.delayed(const Duration(milliseconds: 250));
@@ -93,35 +85,33 @@ class _TestScreenState extends State<TestScreen> {
       });
     } catch (e) {
       String ip4 = 'Desconocida';
-      String ip6 = 'No disponible';
+String ip6 = 'No disponible';
 
-      try {
-        final ipv4 = await http.get(Uri.parse('https://ipv4.icanhazip.com'));
-        ip4 = ipv4.body.trim();
-      } catch (_) {}
+try {
+  final ipv4 = await http.get(Uri.parse('https://ipv4.icanhazip.com'));
+  ip4 = ipv4.body.trim();
+} catch (_) {}
 
-      try {
-        final ipv6 = await http.get(Uri.parse('https://ipv6.icanhazip.com'));
-        ip6 = ipv6.body.trim();
-      } catch (_) {}
+try {
+  final ipv6 = await http.get(Uri.parse('https://ipv6.icanhazip.com'));
+  ip6 = ipv6.body.trim();
+} catch (_) {}
 
-      setState(() {
-        ipInfo = 'IPv4 Pública: $ip4\nIPv6 Pública: $ip6';
-      });
+setState(() {
+  ipInfo = 'IPv4 Pública: $ip4\nIPv6 Pública: $ip6';
+});
     }
   }
 
   void toggleWakelock(bool enable) {
     setState(() {
       wakelockEnabled = enable;
-      enable ? WakelockPlus.enable() : WakelockPlus.disable();
+      if (enable) {
+        WakelockPlus.enable();
+      } else {
+        WakelockPlus.disable();
+      }
     });
-  }
-
-  Color _getColor(String value) {
-    if (value.startsWith('OK')) return Colors.green;
-    if (value.startsWith('Procesando')) return Colors.orange;
-    return Colors.red;
   }
 
   @override
@@ -139,8 +129,9 @@ class _TestScreenState extends State<TestScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: () async {
-                  await runTests();
+                onPressed: () {
+                  runTests();
+                  getIpPublic();
                 },
               ),
             ],
@@ -171,14 +162,8 @@ class _TestScreenState extends State<TestScreen> {
                           final result = results[name] ?? TestResult('...', '...');
                           return DataRow(cells: [
                             DataCell(SizedBox(width: 160, child: Text(name))),
-                            DataCell(SizedBox(
-                              width: 140,
-                              child: Text(result.ipv4, style: TextStyle(color: _getColor(result.ipv4))),
-                            )),
-                            DataCell(SizedBox(
-                              width: 140,
-                              child: Text(result.ipv6, style: TextStyle(color: _getColor(result.ipv6))),
-                            )),
+                            DataCell(SizedBox(width: 140, child: Text(result.ipv4))),
+                            DataCell(SizedBox(width: 140, child: Text(result.ipv6))),
                           ]);
                         }).toList(),
                       ),

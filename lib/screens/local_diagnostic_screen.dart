@@ -1,3 +1,4 @@
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:dart_ping/dart_ping.dart';
@@ -127,7 +128,6 @@ class _LocalDiagnosticScreenState extends State<LocalDiagnosticScreen> {
           ],
         ),
       ),
-      
     );
   }
 }

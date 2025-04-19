@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'http_test_screen.dart';
 import 'dns_test_screen.dart';
-import 'package:novaipv6/screens/local_diagnostic_screen.dart';
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
@@ -24,12 +23,6 @@ class MenuScreen extends StatelessWidget {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsTestScreen()));
             },
             child: const Text('2. Prueba de DNS IPv4 / IPv6'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const LocalDiagnosticScreen()));
-            },
-            child: const Text('3. Diagnóstico Local (Ping Gateway)'),
           ),
         ],
       ),

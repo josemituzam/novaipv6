@@ -1,6 +1,3 @@
-// Archivo actualizado dns_test_screen.dart con mejoras aplicadas
-// Versión con resumen de resultados y colores por estado
-
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -27,8 +24,6 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
   String? selectedDomain;
   TextEditingController customDomainController = TextEditingController();
   bool isCustomSelected = false;
-  int okIPv4 = 0;
-  int okIPv6 = 0;
 
   @override
   void initState() {
@@ -38,20 +33,13 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
     _initFlow();
   }
 
-  void toggleWakelock(bool enable) {
-    setState(() {
-      wakelockEnabled = enable;
-      enable ? WakelockPlus.enable() : WakelockPlus.disable();
-    });
-  }
-
   Future<void> _initFlow() async {
     await getIpPublic();
     await _loadLists();
   }
 
   Future<void> _loadLists() async {
-    final dnsList = await rootBundle.loadString('assets/dns_list.txt');
+    final dnsList = await rootBundle.loadString('assets/dns_list.csv');
     final domainCsv = await rootBundle.loadString('assets/domains.csv');
 
     dnsServers = dnsList
@@ -110,7 +98,9 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
   }
 
   Future<void> runTests() async {
-    final domainToTest = isCustomSelected ? customDomainController.text.trim() : selectedDomain;
+    final domainToTest = isCustomSelected
+        ? customDomainController.text.trim()
+        : selectedDomain;
 
     if (domainToTest == null || domainToTest.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -121,8 +111,6 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
 
     setState(() {
       results.clear();
-      okIPv4 = 0;
-      okIPv6 = 0;
     });
 
     await getIpPublic();
@@ -150,7 +138,7 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
 
   Future<void> _testServer(Map<String, String?> server, String domain) async {
     final name = server['name']!;
-    results[name] = {'ipv4': 'Procesando...', 'ipv6': 'Procesando...'};
+    results[name] = {'ipv4': '...', 'ipv6': '...'};
     setState(() {});
 
     String ipv4Result = 'FALLA';
@@ -167,7 +155,6 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
           final ip = (res['ips'] as List).first;
           final latency = res['latencyMs'];
           ipv4Result = 'OK (${latency} ms)\n$ip';
-          okIPv4++;
         }
       } catch (_) {}
     }
@@ -183,7 +170,6 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
           final ip = (res['ips'] as List).first;
           final latency = res['latencyMs'];
           ipv6Result = 'OK (${latency} ms)\n$ip';
-          okIPv6++;
         }
       } catch (_) {}
     }
@@ -195,18 +181,27 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
     setState(() {});
   }
 
-  Color _getColor(String value) {
-    if (value.startsWith('OK')) return Colors.green;
-    if (value.startsWith('Procesando')) return Colors.orange;
-    return Colors.red;
+  void toggleWakelock(bool enable) {
+    setState(() {
+      wakelockEnabled = enable;
+      enable ? WakelockPlus.enable() : WakelockPlus.disable();
+    });
+  }
+
+  List<DataRow> _buildRows() {
+    return dnsServers.map((server) {
+      final name = server['name']!;
+      final res = results[name] ?? {'ipv4': '...', 'ipv6': '...'};
+      return DataRow(cells: [
+        DataCell(SizedBox(width: 160, child: Text(name))),
+        DataCell(SizedBox(width: 140, child: Text(res['ipv4']!))),
+        DataCell(SizedBox(width: 140, child: Text(res['ipv6']!))),
+      ]);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = dnsServers.length;
-    final failIPv4 = total - okIPv4;
-    final failIPv6 = total - okIPv6;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Test DNS IPv4 e IPv6'),
@@ -217,7 +212,10 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
               Switch(value: wakelockEnabled, onChanged: toggleWakelock),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: runTests,
+                onPressed: () {
+                  runTests();
+                  getIpPublic();
+                },
               ),
             ],
           ),
@@ -271,7 +269,9 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
                 ElevatedButton.icon(
                   icon: const Icon(Icons.search),
                   label: const Text("Iniciar pruebas"),
-                  onPressed: runTests,
+                  onPressed: () {
+                    runTests();
+                  },
                 ),
               ],
             ),
@@ -290,31 +290,10 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
                           DataColumn(label: Text('IPv4')),
                           DataColumn(label: Text('IPv6')),
                         ],
-                        rows: dnsServers.map((server) {
-                          final name = server['name']!;
-                          final res = results[name] ?? {'ipv4': '...', 'ipv6': '...'};
-                          return DataRow(cells: [
-                            DataCell(SizedBox(width: 160, child: Text(name))),
-                            DataCell(SizedBox(
-                              width: 140,
-                              child: Text(res['ipv4']!, style: TextStyle(color: _getColor(res['ipv4']!))),
-                            )),
-                            DataCell(SizedBox(
-                              width: 140,
-                              child: Text(res['ipv6']!, style: TextStyle(color: _getColor(res['ipv6']!))),
-                            )),
-                          ]);
-                        }).toList(),
+                        rows: _buildRows(),
                       ),
                     ),
                   ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(
-              'Resultados: IPv4 - OK: $okIPv4 / $total, FALLA: $failIPv4 | IPv6 - OK: $okIPv6 / $total, FALLA: $failIPv6',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-            ),
           ),
         ],
       ),
