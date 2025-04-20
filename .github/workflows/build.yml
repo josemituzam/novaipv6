@@ -1,19 +1,19 @@
-name: Build
+name: Flutter CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
     types: [opened, synchronize, reopened]
 
 jobs:
-  sonarqube:
-    name: SonarQube
-    runs-on: windows-latest
+  build:
+    name: Análisis Flutter + Codecov + SonarCloud
+    runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Clonar repositorio
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
 
@@ -28,7 +28,13 @@ jobs:
     - name: Ejecutar pruebas con cobertura
       run: flutter test --coverage
 
-    - name: SonarQube Scan
+    - name: Subir cobertura a Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: coverage/lcov.info
+
+    - name: Análisis con SonarCloud
       uses: SonarSource/sonarqube-scan-action@v1
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
