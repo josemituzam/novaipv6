@@ -1,3 +1,4 @@
+// Archivo actualizado para permitir cancelación segura de pruebas DNS y visual mejorado
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -5,6 +6,12 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import '../services/dns_android_channel.dart';
+
+class CancellationToken {
+  bool _isCancelled = false;
+  bool get isCancelled => _isCancelled;
+  void cancel() => _isCancelled = true;
+}
 
 class DnsTestScreen extends StatefulWidget {
   const DnsTestScreen({super.key});
@@ -24,6 +31,7 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
   String? selectedDomain;
   TextEditingController customDomainController = TextEditingController();
   bool isCustomSelected = false;
+  CancellationToken? _token;
 
   @override
   void initState() {
@@ -39,7 +47,7 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
   }
 
   Future<void> _loadLists() async {
-    final dnsList = await rootBundle.loadString('assets/dns_list.csv');
+    final dnsList = await rootBundle.loadString('assets/dns_list.txt');
     final domainCsv = await rootBundle.loadString('assets/domains.csv');
 
     dnsServers = dnsList
@@ -98,6 +106,10 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
   }
 
   Future<void> runTests() async {
+    _token?.cancel();
+    final token = CancellationToken();
+    _token = token;
+
     final domainToTest = isCustomSelected
         ? customDomainController.text.trim()
         : selectedDomain;
@@ -123,26 +135,30 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
     }
 
     for (var server in dnsServers) {
-      await _testServer(server, domainToTest);
+      if (token.isCancelled) break;
+      await _testServer(server, domainToTest, token);
     }
 
-    final allEmpty = results.values.every((r) => r['ipv4'] == 'FALLA' && r['ipv6'] == 'FALLA');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(allEmpty ? '❌ Ninguna respuesta DNS válida' : '✅ Pruebas DNS completadas'),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    if (!token.isCancelled) {
+      final allEmpty = results.values.every((r) => r['ipv4'] == 'FALLA' && r['ipv6'] == 'FALLA');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(allEmpty ? '❌ Ninguna respuesta DNS válida' : '✅ Pruebas DNS completadas'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
-  Future<void> _testServer(Map<String, String?> server, String domain) async {
+  Future<void> _testServer(Map<String, String?> server, String domain, CancellationToken token) async {
     final name = server['name']!;
-    results[name] = {'ipv4': '...', 'ipv6': '...'};
+    results[name] = {'ipv4': 'Procesando...', 'ipv6': 'Procesando...'};
     setState(() {});
 
     String ipv4Result = 'FALLA';
     String ipv6Result = 'FALLA';
+
+    if (token.isCancelled) return;
 
     if (myIPv4 != null && server['ipv4'] != null && server['ipv4']!.isNotEmpty) {
       try {
@@ -159,6 +175,8 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
       } catch (_) {}
     }
 
+    if (token.isCancelled) return;
+
     if (myIPv6 != null && server['ipv6'] != null && server['ipv6']!.isNotEmpty) {
       try {
         final res = await DnsAndroidChannel.resolve(
@@ -174,6 +192,8 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
       } catch (_) {}
     }
 
+    if (token.isCancelled) return;
+
     results[name] = {
       'ipv4': ipv4Result,
       'ipv6': ipv6Result,
@@ -181,23 +201,27 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
     setState(() {});
   }
 
+  Widget _styledResultText(String value) {
+    Color color = Colors.grey;
+    if (value.contains('OK')) color = Colors.green;
+    if (value.contains('FALLA')) color = Colors.red;
+    if (value.contains('Procesando')) color = Colors.orange;
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: Text(
+        value,
+        key: ValueKey(value),
+        style: TextStyle(color: color),
+      ),
+    );
+  }
+
   void toggleWakelock(bool enable) {
     setState(() {
       wakelockEnabled = enable;
       enable ? WakelockPlus.enable() : WakelockPlus.disable();
     });
-  }
-
-  List<DataRow> _buildRows() {
-    return dnsServers.map((server) {
-      final name = server['name']!;
-      final res = results[name] ?? {'ipv4': '...', 'ipv6': '...'};
-      return DataRow(cells: [
-        DataCell(SizedBox(width: 160, child: Text(name))),
-        DataCell(SizedBox(width: 140, child: Text(res['ipv4']!))),
-        DataCell(SizedBox(width: 140, child: Text(res['ipv6']!))),
-      ]);
-    }).toList();
   }
 
   @override
@@ -208,94 +232,114 @@ class _DnsTestScreenState extends State<DnsTestScreen> {
         actions: [
           Row(
             children: [
-              const Text("Pantalla activa"),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text("Pantalla activa"),
+              ),
               Switch(value: wakelockEnabled, onChanged: toggleWakelock),
               IconButton(
                 icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  runTests();
-                  getIpPublic();
-                },
+                onPressed: runTests,
               ),
             ],
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(ipInfo, style: const TextStyle(fontSize: 14)),
-                const SizedBox(height: 10),
-                DropdownButton<String>(
-                  value: isCustomSelected ? 'personalizado' : selectedDomain,
-                  items: [
-                    ...testDomains.map((entry) => DropdownMenuItem(
-                          value: entry['domain'],
-                          child: Text(entry['name'] ?? entry['domain'] ?? 'Desconocido'),
-                        )),
-                    const DropdownMenuItem(
-                      value: 'personalizado',
-                      child: Text('Dominio personalizado'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == 'personalizado') {
-                        isCustomSelected = true;
-                      } else {
-                        isCustomSelected = false;
-                        selectedDomain = value;
-                        customDomainController.clear();
-                      }
-                    });
-                  },
-                  isExpanded: true,
-                  hint: const Text("Selecciona un dominio"),
-                ),
-                const SizedBox(height: 8),
-                if (isCustomSelected)
-                  TextField(
-                    controller: customDomainController,
-                    decoration: const InputDecoration(
-                      labelText: "Escribe un dominio personalizado",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.search),
-                  label: const Text("Iniciar pruebas"),
-                  onPressed: () {
-                    runTests();
-                  },
-                ),
-              ],
-            ),
-          ),
-          const Divider(),
-          Expanded(
-            child: dnsServers.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columnSpacing: 20.0,
-                        columns: const [
-                          DataColumn(label: Text('Servidor DNS')),
-                          DataColumn(label: Text('IPv4')),
-                          DataColumn(label: Text('IPv6')),
-                        ],
-                        rows: _buildRows(),
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.public, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        ipInfo,
+                        style: const TextStyle(fontSize: 16),
                       ),
                     ),
-                  ),
-          ),
-        ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButton<String>(
+              value: isCustomSelected ? 'personalizado' : selectedDomain,
+              items: [
+                ...testDomains.map((entry) => DropdownMenuItem(
+                      value: entry['domain'],
+                      child: Text(entry['name'] ?? entry['domain'] ?? 'Desconocido'),
+                    )),
+                const DropdownMenuItem(
+                  value: 'personalizado',
+                  child: Text('Dominio personalizado'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  if (value == 'personalizado') {
+                    isCustomSelected = true;
+                  } else {
+                    isCustomSelected = false;
+                    selectedDomain = value;
+                    customDomainController.clear();
+                  }
+                });
+              },
+              isExpanded: true,
+              hint: const Text("Selecciona un dominio"),
+            ),
+            const SizedBox(height: 8),
+            if (isCustomSelected)
+              TextField(
+                controller: customDomainController,
+                decoration: const InputDecoration(
+                  labelText: "Escribe un dominio personalizado",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.search),
+              label: const Text("Iniciar pruebas"),
+              onPressed: runTests,
+            ),
+            const SizedBox(height: 10),
+            const Divider(),
+            Expanded(
+              child: dnsServers.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+                          columns: const [
+                            DataColumn(label: Text('Servidor DNS', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('📡 IPv4', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('🛰️ IPv6', style: TextStyle(fontWeight: FontWeight.bold))),
+                          ],
+                          rows: dnsServers.map((server) {
+                            final name = server['name']!;
+                            final res = results[name] ?? {'ipv4': '...', 'ipv6': '...'};
+                            return DataRow(cells: [
+                              DataCell(SizedBox(width: 160, child: Text(name))),
+                              DataCell(SizedBox(width: 140, child: _styledResultText(res['ipv4']!))),
+                              DataCell(SizedBox(width: 140, child: _styledResultText(res['ipv6']!))),
+                            ]);
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

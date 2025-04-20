@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'http_test_screen.dart';
 import 'dns_test_screen.dart';
+import 'ping_test_screen.dart';
+import 'traceroute_test_screen.dart';
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
@@ -24,6 +26,15 @@ class MenuScreen extends StatelessWidget {
             },
             child: const Text('2. Prueba de DNS IPv4 / IPv6'),
           ),
+          ElevatedButton(
+  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PingTestScreen())),
+  child: const Text("Test de Ping"),
+),
+ElevatedButton(
+  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TracerouteTestScreen())),
+  child: const Text("Test de Traceroute"),
+),
+
         ],
       ),
     );

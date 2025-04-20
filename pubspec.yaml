@@ -22,9 +22,12 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/http_list.csv
-    - assets/dns_list.csv
+    - assets/http_list.txt
+    - assets/dns_list.txt
     - assets/domains.csv
+    - assets/ping_list.txt
+    - assets/tracerouter.txt
+
 
 dependency_overrides:
   win32: ^5.0.0

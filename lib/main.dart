@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
-import 'screens/menu_screen.dart';
+import 'screens/menu_screen.dart'; // ← Asegúrate que este es el menú correcto
 
 void main() {
-  runApp(const NovaIPv6App());
+  runApp(const MyApp());
 }
 
-class NovaIPv6App extends StatelessWidget {
-  const NovaIPv6App({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'IPv6 Network Test',
-      home: const MenuScreen(),
       debugShowCheckedModeBanner: false,
+      title: 'NovaIPv6',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: const MenuScreen(), // ← CAMBIA AQUÍ si usabas MenuScreen
     );
   }
 }
